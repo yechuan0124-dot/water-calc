@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>一键测水</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body {
+    background:#0D1117; color:#E6EDF3;
+    font-family:system-ui,-apple-system,sans-serif;
+    padding:10px; min-height:100vh;
+  }
+  .topbar { display:flex; gap:6px; margin-bottom:8px; }
+  .topbar select {
+    flex:1; padding:12px 14px; font-size:15px;
+    background:#21262D; color:#E6EDF3; border:none; border-radius:10px;
+  }
+  .topbar button {
+    padding:12px 14px; font-size:14px; border:none; border-radius:10px;
+    font-weight:600; white-space:nowrap;
+  }
+  .btn-wechat { background:#07C160; color:#fff; }
+  .btn-history { background:#58A6FF; color:#000; }
+
+  #copyBtn {
+    width:100%; padding:12px; font-size:15px;
+    background:#0071E3; color:#fff; border:none; border-radius:10px;
+    font-weight:600; margin-bottom:8px;
+  }
+  #copyBtn:disabled { background:#30363D; color:#8D96A0; }
+
+  .item {
+    background:#21262D; border-radius:10px; padding:10px 12px; margin-bottom:6px;
+  }
+  .well { font-size:13px; color:#8D96A0; text-align:center; margin-bottom:4px; }
+  .time {
+    font-size:18px; color:#007AFF; font-weight:700; text-align:center;
+    margin-bottom:6px; letter-spacing:0.5px;
+  }
+  .btns { display:flex; gap:6px; margin-bottom:6px; }
+  .btns button {
+    flex:1; padding:8px; border:none; border-radius:8px; font-size:14px; font-weight:600;
+  }
+  .start { background:#30D158; color:#000; }
+  .reset { background:#FF453A; color:#fff; }
+  .vols { display:flex; gap:4px; }
+  .vols button {
+    flex:1; padding:7px 4px; background:#2B3038; color:#E6EDF3;
+    border:none; border-radius:6px; font-size:12px;
+  }
+  .vols button.active { background:#0071E3; color:#FFF; }
+
+  .toast {
+    position:fixed; left:50%; bottom:60px; transform:translateX(-50%);
+    background:rgba(0,113,227,0.9); color:#fff; padding:10px 20px;
+    border-radius:12px; font-size:14px; font-weight:500;
+    opacity:0; pointer-events:none; transition:opacity 0.3s; z-index:9999;
+  }
+  .toast.show { opacity:1; }
+  .toast.err { background:rgba(255,69,58,0.9); }
+  .toast.ok { background:rgba(48,209,88,0.9); color:#000; }
+
+  .modal-mask {
+    position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    display:none; align-items:center; justify-content:center; z-index:1000; padding:10px;
+  }
+  .modal-mask.show { display:flex; }
+  .modal {
+    background:#161B22; border-radius:0; width:100%; max-width:100%;
+    height:100vh; max-height:100vh; overflow-y:auto; padding:16px;
+  }
+  .modal h3 { font-size:17px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; }
+  .modal h3 .close { background:none; border:none; color:#8D96A0; font-size:22px; cursor:pointer; }
+  .modal .well-tabs { display:flex; flex-wrap:wrap; gap:4px; margin-bottom:10px; }
+  .modal .well-tabs button {
+    padding:6px 10px; font-size:12px; border:none; border-radius:6px;
+    background:#21262D; color:#8D96A0;
+  }
+  .modal .well-tabs button.active { background:#0071E3; color:#fff; }
+  .record-list { font-size:13px; }
+  .record-item {
+    background:#21262D; border-radius:8px; padding:8px 10px; margin-bottom:5px;
+    display:flex; justify-content:space-between; align-items:center; gap:8px;
+  }
+  .record-item .r-check {
+    width:20px; height:20px; flex-shrink:0; accent-color:#0071E3;
+  }
+  .record-item .r-info { flex:1; min-width:0; }
+  .record-item .r-date { color:#8D96A0; font-size:12px; }
+  .record-item .r-val { color:#30D158; font-weight:600; font-size:15px; cursor:pointer; }
+  .record-item .r-meta { color:#6E7681; font-size:11px; }
+  #chart { width:100%; height:260px; margin:10px 0; background:#0D1117; border-radius:8px; }
+  .empty { text-align:center; color:#6E7681; padding:30px 0; font-size:14px; }
+
+  .status-bar {
+    font-size:12px; color:#8D96A0; text-align:center; margin-bottom:6px; min-height:18px;
+  }
+  .status-bar.ok { color:#30D158; }
+  .status-bar.err { color:#FF453A; }
+
+  .batch-bar {
+    display:flex; gap:8px; margin-bottom:10px; align-items:center;
+  }
+  .batch-bar button {
+    padding:8px 14px; border:none; border-radius:8px; font-size:13px; font-weight:600;
+  }
+  .btn-copy-sel { background:#30D158; color:#000; flex:1; }
+  .btn-select-all { background:#21262D; color:#E6EDF3; }
+  .batch-count { font-size:12px; color:#8D96A0; white-space:nowrap; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <select id="wellSelect">
+    <option value="">选择井场</option>
+  </select>
+  <button class="btn-wechat" id="wechatBtn">微信</button>
+  <button class="btn-history" id="historyBtn">记录</button>
+</div>
+
+<div class="status-bar" id="statusBar">正在连接云端...</div>
+
+<button id="copyBtn">一键复制</button>
+
+<div id="items"></div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-mask" id="historyModal">
+  <div class="modal">
+    <h3>历史记录 <button class="close" onclick="closeModal('historyModal')">&times;</button></h3>
+    <div class="well-tabs" id="wellTabs"></div>
+    <div id="chart"></div>
+    <div class="batch-bar" id="batchBar" style="display:none;">
+      <button class="btn-select-all" id="selectAllBtn">全选</button>
+      <button class="btn-copy-sel" id="copySelBtn">复制选中</button>
+      <span class="batch-count" id="batchCount">0条</span>
+    </div>
+    <div class="record-list" id="recordList"></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="uploadModal">
+  <div class="modal" style="height:auto;max-height:none;border-radius:14px;width:90%;max-width:320px;margin:auto;">
+    <h3>上传到云端？</h3>
+    <p style="font-size:14px;color:#8D96A0;margin-bottom:16px;" id="uploadPreview"></p>
+    <div style="display:flex;gap:10px;">
+      <button onclick="doUpload(false)" style="flex:1;padding:12px;background:#30363D;color:#E6EDF3;border:none;border-radius:8px;font-size:15px;font-weight:600;">仅复制</button>
+      <button onclick="doUpload(true)" style="flex:1;padding:12px;background:#30D158;color:#000;border:none;border-radius:8px;font-size:15px;font-weight:600;">复制并上传</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ENV_ID = 'yechuan0124-d3gqp3mjqe6f8ea60';
+const API_BASE = 'https://' + ENV_ID + '.api.tcloudbasegateway.com/v1/rdb/rest';
+const ACCESS_KEY = 'eyJhbGciOiJSUzI1NiIsImtpZCI6ImFmMzU0NzkwLTYwZDEtNDM1ZS1iZjIzLTZkZTZjM2YwZDQ2OSJ9.eyJpc3MiOiJodHRwczovL3llY2h1YW4wMTI0LWQzZ3FwM21qcWU2ZjhlYTYwLmFwLXNoYW5naGFpLnRjYi1hcGkudGVuY2VudGNsb3VkYXBpLmNvbSIsInN1YiI6ImFub24iLCJhdWQiOiJ5ZWNodWFuMDEyNC1kM2dxcDNtanFlNmY4ZWE2MCIsImV4cCI6NDA5MTYyMDg2NywiaWF0IjoxNzg3OTM3NjY3LCJub25jZSI6ImszZU9fWlZvVG1PQnZFUmd1Y3hIVmciLCJhdF9oYXNoIjoiazNlT19aVm9UbU9CdkVSZ3VjeEhWZyIsIm5hbWUiOiJBbm9ueW1vdXMiLCJzY29wZSI6ImFub255bW91cyIsInByb2plY3RfaWQiOiJ5ZWNodWFuMDEyNC1kM2dxcDNtanFlNmY4ZWE2MCIsIm1ldGEiOnsicGxhdGZvcm0iOiJQdWJsaXNoYWJsZUtleSJ9LCJyb2xlIjoiYW5vbiIsImlzX2Fub255bW91cyI6dHJ1ZSwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiYW5vbnltb3VzIiwicHJvdmlkZXJzIjpbImFub255bW91cyJdfSwidXNlcl9tZXRhZGF0YSI6eyJuYW1lIjoiQW5vbnltb3VzIn0sInVzZXJfdHlwZSI6IiIsImNsaWVudF90eXBlIjoiY2xpZW50X3VzZXIiLCJpc19zeXN0ZW1fYWRtaW4iOmZhbHNlfQ.H3rTz2WFG6sjlIaz08essJxC5HObxbQGpG-gGEuY73bE732Zcc8UDl32fFPQfu9YK3FcH8dp1tpsh8cCvMSVcAtdcQDS08e4yKvxzDz2BIW2ovkmcJAmqVpdgHGSnMbTaQu3nzoR60DDCXEDjkQWZ4o1WxRkQskaVc-cWKFGn9XGzmLybLP3iXLlRuCKa5a7BXeIu9p__vnbqQLWmXKIiIbAZ0WZlihgrPiaHFK6oq2V6Sqg5_wu83ph4LsoDIxm01TcTHtVDiB1hl5VByecY1S5DGMbZX3QPGBnH0lwsvn3MyVBIL3rBQwF8B-w1S8sqCeHeuzRxkVtpd5GQ4iBBQ';
+
+const WELL_SITES = [
+  { name:'1号井场', wells:['Jcs-1','JS-5','JS-6'] },
+  { name:'14号井场', wells:['水6向1','水6L1'] },
+  { name:'2号井场', wells:['Js-9','Js-16','Js-8','Js-7'] },
+  { name:'4号井场', wells:['Jsl-19','Js-17','Js-18'] },
+  { name:'3号井场', wells:['JS-20','JS-11','JS-13','JS-12','JS-10'] },
+  { name:'5号井场', wells:['Js-4','Js-3','Js-14'] },
+  { name:'6号井场', wells:['JS-1','JS-2'] },
+  { name:'老7号井场', wells:['水5-向2','水5-向1'] },
+  { name:'13号井场', wells:['水7向3'] },
+  { name:'J9井场', wells:['J9-向4','J9-向5','J9-向2','J9-向1','J9-向3'] },
+  { name:'J7井场', wells:['J7-向3','J7-向2','J7-向1'] },
+  { name:'J3井场', wells:['J3-向1','J3-向2'] },
+  { name:'J4井场', wells:['J4-向2','J4-向1'] },
+  { name:'水10井场', wells:['水10-L1','水10-向1','JCS-6'] },
+];
+
+const vol = [4,8,10,20];
+let tim = [], run = [], sel = [], startTime = [];
+let activeCount = 0, currentSite = '', cloudReady = false, chart = null, currentHistoryData = [];
+
+let deviceId = localStorage.getItem('device_id');
+if (!deviceId) { deviceId = 'dev_' + Math.random().toString(36).substr(2,12); localStorage.setItem('device_id', deviceId); }
+
+function apiHeaders() { return { 'Content-Type':'application/json', 'Authorization':'Bearer '+ACCESS_KEY, 'X-Db-Instance':'default' }; }
+async function apiInsert(table, record) {
+  const res = await fetch(API_BASE+'/'+table, { method:'POST', headers:{...apiHeaders(),'Prefer':'missing=default'}, body:JSON.stringify(record) });
+  if (!res.ok) throw new Error('HTTP '+res.status+': '+(await res.text()).substring(0,200));
+  return res.json();
+}
+async function apiQuery(table, params) {
+  let url = API_BASE+'/'+table; const qs = new URLSearchParams(params).toString(); if (qs) url += '?'+qs;
+  const res = await fetch(url, { method:'GET', headers:apiHeaders() });
+  if (!res.ok) throw new Error('HTTP '+res.status+': '+(await res.text()).substring(0,200));
+  return res.json();
+}
+async function testCloud() {
+  try { await apiQuery('water_records',{select:'well_name',limit:'1'}); cloudReady=true; setStatus('云端已连接','ok'); return true; }
+  catch(e) { setStatus('云端连接失败: '+e.message,'err'); return false; }
+}
+
+function renderItems(count, wellNames) {
+  activeCount = count;
+  tim = new Array(count+1).fill(0); run = new Array(count+1).fill(0);
+  sel = new Array(count+1).fill(-1); startTime = new Array(count+1).fill(0);
+  let html = '';
+  for(let i=1;i<=count;i++){
+    html += '<div class="item"><div class="well" id="w'+i+'">'+(wellNames[i-1]||'')+'</div><div class="time" id="t'+i+'">00:00.00</div><div class="btns"><button class="start" id="s'+i+'">开始</button><button class="reset" id="r'+i+'">重置</button></div><div class="vols"><button id="v'+i+'_0">4升<span id="vv'+i+'_0">0.00</span></button><button id="v'+i+'_1">8升<span id="vv'+i+'_1">0.00</span></button><button id="v'+i+'_2">10升<span id="vv'+i+'_2">0.00</span></button><button id="v'+i+'_3">20升<span id="vv'+i+'_3">0.00</span></button></div></div>';
+  }
+  document.getElementById('items').innerHTML = html;
+  for(let i=1;i<=count;i++){
+    document.getElementById('s'+i).onclick = function(){ playClick(); if(run[i]){run[i]=0;this.innerText='开始';}else{run[i]=1;this.innerText='暂停';startTime[i]=Date.now()-tim[i]*10;} };
+    document.getElementById('r'+i).onclick = function(){ playClick(); run[i]=0;tim[i]=0;startTime[i]=0;sel[i]=-1; document.getElementById('s'+i).innerText='开始'; for(let k=0;k<4;k++) document.getElementById('v'+i+'_'+k).classList.remove('active'); };
+    for(let k=0;k<4;k++){ document.getElementById('v'+i+'_'+k).onclick = function(){ playClick(); sel[i]=k; for(let j=0;j<4;j++) document.getElementById('v'+i+'_'+j).classList.remove('active'); this.classList.add('active'); }; }
+  }
+}
+
+const wellSelect = document.getElementById('wellSelect');
+WELL_SITES.forEach((s,i)=>{ const opt=document.createElement('option'); opt.value=i; opt.textContent=s.name; wellSelect.appendChild(opt); });
+wellSelect.addEventListener('change', function(){ playClick(); const idx=parseInt(this.value); if(isNaN(idx)){currentSite='';renderItems(1,['']);return;} currentSite=WELL_SITES[idx].name; renderItems(WELL_SITES[idx].wells.length, WELL_SITES[idx].wells); });
+renderItems(1, ['']);
+
+document.getElementById('wechatBtn').onclick = function(){ playClick(); window.location.href='weixin://'; };
+
+function showToast(msg,type){ const t=document.getElementById('toast'); t.innerText=msg; t.className='toast show '+(type||''); setTimeout(()=>t.className='toast',1800); }
+function setStatus(msg,cls){ const el=document.getElementById('statusBar'); el.innerText=msg; el.className='status-bar '+(cls||''); }
+function playClick(){ try{ new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=").play().catch(()=>{}); }catch(e){} }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function copyVal(val){ let ta=document.createElement('textarea'); ta.value=val; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('已复制: '+val+' 方/天','ok'); }
+
+document.getElementById('copyBtn').onclick = async function(){
+  playClick(); let txt='', records=[];
+  for(let i=1;i<=activeCount;i++){
+    let name=document.getElementById('w'+i).innerText.trim();
+    if(name&&sel[i]!=-1&&tim[i]>0){ let sec=tim[i]/100; let v=(vol[sel[i]]/sec*3.6*24).toFixed(2); txt+=name+'井 产水 '+v+' 方\n'; records.push({well_name:name,well_site:currentSite,volume:vol[sel[i]],duration_seconds:Math.round(sec*100)/100,water_production:parseFloat(v),measured_at:new Date().toISOString(),device_id:deviceId}); }
+  }
+  if(!txt){ showToast('请选择井场和排量','err'); return; }
+  let ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('已复制','ok');
+  pendingRecords=records; document.getElementById('uploadPreview').innerText='共 '+records.length+' 条数据，是否上传到云端？'; document.getElementById('uploadModal').classList.add('show');
+};
+let pendingRecords=[];
+async function doUpload(shouldUpload){ closeModal('uploadModal'); if(!shouldUpload)return; if(!cloudReady){showToast('云端未连接','err');return;} const btn=document.getElementById('copyBtn'); btn.disabled=true; btn.innerText='上传中...'; let ok=0; for(const rec of pendingRecords){ try{await apiInsert('water_records',rec);ok++;}catch(e){} } showToast(ok===pendingRecords.length?'上传成功 '+ok+' 条':'上传 '+ok+'/'+pendingRecords.length, ok===pendingRecords.length?'ok':'err'); btn.disabled=false; btn.innerText='一键复制'; pendingRecords=[]; }
+
+document.getElementById('historyBtn').onclick = async function(){ playClick(); document.getElementById('historyModal').classList.add('show'); await loadWellTabs(); };
+async function loadWellTabs(){ const tabs=document.getElementById('wellTabs'); tabs.innerHTML=''; document.getElementById('batchBar').style.display='none'; if(!cloudReady){document.getElementById('recordList').innerHTML='<div class="empty">云端未连接</div>';return;} try{ const data=await apiQuery('water_records',{select:'well_name',limit:'1000'}); if(!data||data.length===0){document.getElementById('recordList').innerHTML='<div class="empty">暂无记录</div>';return;} const names=[...new Set(data.map(d=>d.well_name))].sort(); names.forEach(name=>{ const btn=document.createElement('button'); btn.textContent=name; btn.onclick=()=>loadWellHistory(name,btn); tabs.appendChild(btn); }); tabs.firstChild.classList.add('active'); loadWellHistory(names[0],tabs.firstChild); }catch(e){ document.getElementById('recordList').innerHTML='<div class="empty">加载失败: '+e.message+'</div>'; } }
+async function loadWellHistory(wellName,tabBtn){ document.querySelectorAll('.well-tabs button').forEach(b=>b.classList.remove('active')); if(tabBtn)tabBtn.classList.add('active'); const list=document.getElementById('recordList'); list.innerHTML='<div class="empty">加载中...</div>'; try{ const data=await apiQuery('water_records',{select:'*',well_name:'eq.'+wellName,order:'measured_at.desc',limit:'200'}); if(!data||data.length===0){list.innerHTML='<div class="empty">暂无记录</div>';document.getElementById('batchBar').style.display='none';if(chart)chart.clear();return;} currentHistoryData=data; document.getElementById('batchBar').style.display='flex'; updateBatchCount(); list.innerHTML=data.map((d,idx)=>{ const dt=new Date(d.measured_at); const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); const ts=String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'); return '<div class="record-item"><input type="checkbox" class="r-check" data-idx="'+idx+'" onchange="updateBatchCount()"><div class="r-info"><div class="r-date">'+ds+' '+ts+'</div><div class="r-meta">'+d.volume+'升 / '+d.duration_seconds+'秒</div></div><div class="r-val" title="双击复制" ondblclick="copyVal(\''+d.water_production+'\')">'+d.water_production+' 方/天</div></div>'; }).join(''); renderChart(data.slice().reverse()); }catch(e){ list.innerHTML='<div class="empty">加载失败: '+e.message+'</div>'; } }
+function updateBatchCount(){ document.getElementById('batchCount').innerText=document.querySelectorAll('.r-check:checked').length+'条'; }
+document.getElementById('selectAllBtn').onclick=function(){ const checks=document.querySelectorAll('.r-check'); const all=Array.from(checks).every(c=>c.checked); checks.forEach(c=>c.checked=!all); this.innerText=all?'全选':'取消全选'; updateBatchCount(); };
+document.getElementById('copySelBtn').onclick=function(){ const checks=document.querySelectorAll('.r-check:checked'); if(checks.length===0){showToast('请先勾选记录','err');return;} let txt=''; checks.forEach(c=>{ const idx=parseInt(c.dataset.idx); const d=currentHistoryData[idx]; const dt=new Date(d.measured_at); const ds=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0'); const ts=String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0'); txt+=ds+' '+ts+'  '+d.water_production+' 方/天\n'; }); let ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); showToast('已复制 '+checks.length+' 条记录','ok'); };
+function renderChart(data){ if(!chart)chart=echarts.init(document.getElementById('chart'),'dark'); const times=data.map(d=>{const dt=new Date(d.measured_at);return (dt.getMonth()+1)+'/'+dt.getDate()+' '+String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');}); const values=data.map(d=>d.water_production); chart.setOption({backgroundColor:'transparent',grid:{left:50,right:15,top:20,bottom:40},tooltip:{trigger:'axis'},xAxis:{type:'category',data:times,axisLabel:{fontSize:10,rotate:30}},yAxis:{type:'value',name:'方/天',nameTextStyle:{fontSize:11}},series:[{name:'产水量',type:'line',data:values,smooth:true,lineStyle:{color:'#30D158',width:2},itemStyle:{color:'#30D158'},areaStyle:{color:'rgba(48,209,88,0.15)'}}]}); }
+
+setInterval(()=>{ for(let i=1;i<=activeCount;i++){ if(run[i])tim[i]=Math.floor((Date.now()-startTime[i])/10); let ms=tim[i]%100,s=Math.floor(tim[i]/100)%60,m=Math.floor(tim[i]/6000); document.getElementById('t'+i).innerText=(m<10?'0':'')+m+':'+(s<10?'0':'')+s+'.'+(ms<10?'0':'')+ms; for(let k=0;k<4;k++){ let sec=tim[i]/100; document.getElementById('vv'+i+'_'+k).innerText=sec>0?(vol[k]/sec*3.6*24).toFixed(2):'0.00'; } } },10);
+
+testCloud();
+window.addEventListener('resize',()=>{ if(chart)chart.resize(); });
+</script>
+</body>
+</html>
